@@ -2,55 +2,48 @@ import streamlit as st
 from PIL import Image
 from google import genai
 from google.genai import types
-import my_settings
+import os
 
 # --- 1. CONFIGURATION & STYLING ---
 st.set_page_config(page_title="Zengo Vision", page_icon="👁️", layout="centered")
 
 st.markdown("""
 <style>
-    /* 1. Main Background - Light Mint Green */
-    .stApp {
-        background-color: #e8f5e9; 
-        color: #202124;
-    }
-    
-    /* 2. Sidebar Background - Slightly darker green */
-    section[data-testid="stSidebar"] {
-        background-color: #c8e6c9;
-        color: #000000;
-    }
-    
-    /* 3. Title Styling */
-    h1 {
-        color: #1b5e20;
-        font-weight: bold;
-    }
-    
-    /* 4. Chat Input Box Border */
-    .stChatInput {
-        border-color: #2e7d32 !important;
-    }
-    
-    /* 5. Force text color in markdown to be dark grey */
-    .stMarkdown p {
-        color: #202124 !important;
-    }
+    .stApp { background-color: #e8f5e9; color: #202124; }
+    section[data-testid="stSidebar"] { background-color: #c8e6c9; color: #000000; }
+    h1 { color: #1b5e20; font-weight: bold; }
+    .stChatInput { border-color: #2e7d32 !important; }
+    .stMarkdown p { color: #202124 !important; }
 </style>
 """, unsafe_allow_html=True)
 
+# --- 2. API KEY SETUP (Hybrid: Works Locally AND on Cloud) ---
+api_key = None
+
+# First, check if we are on Streamlit Cloud
+if "GOOGLE_API_KEY" in st.secrets:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+else:
+    # If not on Cloud, try local file
+    try:
+        import my_settings
+        api_key = my_settings.GOOGLE_API_KEY
+    except ImportError:
+        st.error("⚠️ API Key not found! Please set it in my_settings.py or Streamlit Secrets.")
+        st.stop()
+
 # Initialize Client
 try:
-    client = genai.Client(api_key=my_settings.GOOGLE_API_KEY)
-except AttributeError:
-    st.error("⚠️ API Key missing in my_settings.py")
+    client = genai.Client(api_key=api_key)
+except Exception as e:
+    st.error(f"Connection Error: {e}")
     st.stop()
 
-# --- 2. SESSION STATE ---
+# --- 3. SESSION STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- 3. SIDEBAR SETTINGS ---
+# --- 4. SIDEBAR SETTINGS ---
 with st.sidebar:
     st.title("👁️ Vision Controls")
     
@@ -69,19 +62,18 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-# --- 4. DISPLAY CHAT HISTORY ---
+# --- 5. DISPLAY CHAT HISTORY ---
 st.title("Zengo Vision 👁️")
-st.caption("Powered by Gemini 2.5 Flash-Lite (High Quota)")
+st.caption("Powered by Gemini 2.5 Flash-Lite (Cloud Ready)")
 
 for message in st.session_state.messages:
     avatar = "👤" if message["role"] == "user" else "🤖"
     with st.chat_message(message["role"], avatar=avatar):
         st.markdown(message["content"])
 
-# --- 5. HANDLE INPUT ---
+# --- 6. HANDLE INPUT ---
 if prompt := st.chat_input("Ask something about the image, or just chat..."):
     
-    # Show User Message
     with st.chat_message("user", avatar="👤"):
         st.markdown(prompt)
         if image_data:
@@ -89,21 +81,18 @@ if prompt := st.chat_input("Ask something about the image, or just chat..."):
     
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # Generate AI Response
     with st.chat_message("assistant", avatar="🤖"):
         message_placeholder = st.empty()
         message_placeholder.markdown("Thinking...")
         
         try:
             if image_data:
-                # Image Mode - Using Lite model for higher limits
                 response = client.models.generate_content(
                     model="gemini-2.5-flash-lite",
                     contents=[image_data, prompt],
                     config=types.GenerateContentConfig(temperature=creativity)
                 )
             else:
-                # Text Mode - Using Lite model for higher limits
                 chat_context = ""
                 for msg in st.session_state.messages:
                     chat_context += f"{msg['role'].upper()}: {msg['content']}\n"
