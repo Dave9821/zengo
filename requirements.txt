@@ -1,3 +1,6 @@
 streamlit
 google-genai
-pillow
+Pillow
+streamlit-mic-recorder
+gTTS
+feedparser
